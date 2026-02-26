@@ -83,7 +83,7 @@ function setupRemoteClient() {
                 const payload = JSON.parse(message.toString());
                 processIncomingData(payload);
             } catch (e) {
-                app.logger.error("Error parsing Connect telemetry from remote", e);
+                app.logger.error("Error parsing Connect telemetry from remote", { error: e.message, raw: message.toString() });
             }
         }
     });
