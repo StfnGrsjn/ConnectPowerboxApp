@@ -1,4 +1,5 @@
 const GeniusAppSDK = require('./GeniusAppSDK');
+const mqtt = require('mqtt');
 
 // 1. Initialize the App
 const app = new GeniusAppSDK('ConnectPowerboxApp');
@@ -6,9 +7,14 @@ const app = new GeniusAppSDK('ConnectPowerboxApp');
 // 2. Define the Settings Schema for the WebUI
 const settingsSchema = {
     target_device_id: { type: "string", label: "Target Connect ID (e.g., connect/DEMO_MAC)", default: "" },
-    calculation_interval: { type: "number", label: "Aggregration Interval (seconds)", default: 15 }
+    calculation_interval: { type: "number", label: "Aggregration Interval (seconds)", default: 15 },
+    remote_broker_url: { type: "string", label: "Remote Broker URL", default: "mqtt://mqtt.smappeegenius.com:1883" },
+    remote_broker_username: { type: "string", label: "Remote Broker Username", default: "admin" },
+    remote_broker_password: { type: "string", label: "Remote Broker Password", default: "admin123" }
 };
 app.createSettingsMenu(settingsSchema);
+
+let remoteClient = null;
 
 // Memory state
 let vAcc = [0, 0, 0, 0, 0, 0]; // L1N, L2N, L3N, L1L2, L2L3, L3L1
@@ -41,7 +47,51 @@ let systemTopology = "Unknown / Fluctuating";
 // 3. Connect to App Events
 app.onSettingsUpdated = (newSettings) => {
     app.logger.info(`Settings updated! Target Device ID: ${newSettings.target_device_id}`);
+    setupRemoteClient();
 };
+
+function setupRemoteClient() {
+    if (remoteClient) {
+        remoteClient.end();
+        remoteClient = null;
+    }
+    const url = app.settings.remote_broker_url;
+    if (!url) return;
+
+    app.logger.info(`Connecting to remote broker: ${url}`);
+    remoteClient = mqtt.connect(url, {
+        username: app.settings.remote_broker_username,
+        password: app.settings.remote_broker_password,
+        reconnectPeriod: 5000
+    });
+
+    remoteClient.on('connect', () => {
+        app.logger.info(`Connected to remote broker ${url}`);
+        const targetId = app.settings.target_device_id;
+        if (targetId) {
+            remoteClient.subscribe(`${targetId}/data`);
+            app.logger.info(`Subscribed to remote target: ${targetId}/data`);
+        }
+    });
+
+    remoteClient.on('message', (topic, message) => {
+        const targetId = app.settings.target_device_id;
+        if (!targetId || targetId.trim() === '') return;
+
+        if (topic === `${targetId}/data`) {
+            try {
+                const payload = JSON.parse(message.toString());
+                processIncomingData(payload);
+            } catch (e) {
+                app.logger.error("Error parsing Connect telemetry from remote", e);
+            }
+        }
+    });
+
+    remoteClient.on('error', (err) => {
+        app.logger.error(`Remote broker error: ${err.message}`);
+    });
+}
 
 // Listen to the target Connect's high-frequency data
 app.mqttClient.on('message', (topic, message) => {
@@ -268,8 +318,13 @@ function publishConfig(typesArray, phasesArray) {
 
     app.publishData(`writeback`, payload); // Publishes internally to Genius App topics
     // Actually write to the specific target configure topic:
-    app.mqttClient.publish(`${targetId}/config/in`, JSON.stringify(payload));
-    app.logger.info("Sent CT Configuration Map to target device.");
+    if (remoteClient && remoteClient.connected) {
+        remoteClient.publish(`${targetId}/config/in`, JSON.stringify(payload));
+        app.logger.info(`Sent CT Configuration Map to remote device (${targetId}).`);
+    } else {
+        app.mqttClient.publish(`${targetId}/config/in`, JSON.stringify(payload));
+        app.logger.info(`Sent CT Configuration Map to local broker device (${targetId}).`);
+    }
 }
 
 function publishUiData(meanV) {
@@ -309,6 +364,9 @@ async function main() {
     if (app.settings.target_device_id) {
         app.mqttClient.subscribe(`${app.settings.target_device_id}/data`);
     }
+
+    // Attempt to connect to remote broker using default parsed settings
+    setupRemoteClient();
 }
 
 main();
