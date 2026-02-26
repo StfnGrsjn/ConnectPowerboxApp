@@ -55,14 +55,20 @@ function setupRemoteClient() {
         remoteClient.end();
         remoteClient = null;
     }
-    const url = app.settings.remote_broker_url;
+    let url = app.settings.remote_broker_url;
     if (!url) return;
+
+    // Auto-correct protocol if port 8883 is specified but schema is mqtt://
+    if (url.includes(':8883') && url.startsWith('mqtt://')) {
+        url = url.replace('mqtt://', 'mqtts://');
+    }
 
     app.logger.info(`Connecting to remote broker: ${url}`);
     remoteClient = mqtt.connect(url, {
         username: app.settings.remote_broker_username,
         password: app.settings.remote_broker_password,
-        reconnectPeriod: 5000
+        reconnectPeriod: 5000,
+        rejectUnauthorized: false // Bypass self-signed cert issues for Edge deployments
     });
 
     remoteClient.on('connect', () => {
