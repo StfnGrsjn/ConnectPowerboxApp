@@ -58,6 +58,11 @@ function setupRemoteClient() {
     let url = app.settings.remote_broker_url;
     if (!url) return;
 
+    // Auto-correct missing schema prefix
+    if (!url.startsWith('mqtt://') && !url.startsWith('mqtts://') && !url.startsWith('ws://') && !url.startsWith('wss://')) {
+        url = 'mqtt://' + url;
+    }
+
     // Auto-correct protocol if port 8883 is specified but schema is mqtt://
     if (url.includes(':8883') && url.startsWith('mqtt://')) {
         url = url.replace('mqtt://', 'mqtts://');
