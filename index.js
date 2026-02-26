@@ -127,27 +127,45 @@ app.mqttClient.on('message', (topic, message) => {
 
 
 function processIncomingData(payload) {
-    if (!payload.voltages || !payload.channels) return;
+    // We expect voltages. For CT data, we now support either the legacy 'channels' array of objects,
+    // or the new firmware's separate arrays: 'currents', 'active_powers', 'apparent_powers'
+    if (!payload.voltages) return;
     latestTelemetry = payload;
 
-    const vArr = payload.voltages; // [vL1_N, vL2_N, vL3_N, vL1_L2, vL2_L3, vL3_L1]
-    const cArr = payload.channels; // Array of objects
+    const vArr = payload.voltages || []; // [vL1_N, vL2_N, vL3_N, vL1_L2, vL2_L3, vL3_L1]
 
     // Accumulate Voltages
     for (let i = 0; i < 6; i++) {
         vAcc[i] += (vArr[i] || 0);
     }
 
-    // Accumulate Currents (use .current from payload, which is fundamental based on the driver we analyzed)
+    // Accumulate Currents and Powers
     for (let i = 0; i < 28; i++) {
-        const ct = cArr.find(c => c.id === i + 1);
-        if (ct) {
-            iAcc[i] += (ct.current || 0);
+        let currentVal = 0;
+        let activeVal = 0;
+        let apparentVal = 0;
 
-            // Instantaneous power capture
-            ctDataMap[i].activePower15s = ct.active_power || 0;
-            ctDataMap[i].apparentPower15s = ct.apparent_power || 0;
+        // Check for new flat array format
+        if (payload.currents && Array.isArray(payload.currents)) {
+            currentVal = payload.currents[i] || 0;
+            activeVal = payload.active_powers ? (payload.active_powers[i] || 0) : 0;
+            apparentVal = payload.apparent_powers ? (payload.apparent_powers[i] || 0) : 0;
         }
+        // Fallback to old channels object array format
+        else if (payload.channels && Array.isArray(payload.channels)) {
+            const ct = payload.channels.find(c => c.id === i + 1);
+            if (ct) {
+                currentVal = ct.current || 0;
+                activeVal = ct.active_power || 0;
+                apparentVal = ct.apparent_power || 0;
+            }
+        }
+
+        iAcc[i] += currentVal;
+
+        // Instantaneous power capture (don't accumulate power, just store latest for 15s window analysis)
+        ctDataMap[i].activePower15s = activeVal;
+        ctDataMap[i].apparentPower15s = apparentVal;
     }
 
     accCount++;
