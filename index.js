@@ -302,10 +302,13 @@ async function main() {
     await app.register('Dev-Connect-01', 'Owner-01');
     app.logger.info("Connect Powerbox Parser started.");
 
-    // Subscribe globally to wildcard to find target if necessary, but we'll stick to configured ID
-    // We do need to manually subscribe because the SDK typically isolates to App namespace.
     // Ensure we are listening globally:
     app.mqttClient.subscribe('connect/+/data');
+
+    // Also explicitly subscribe to the dynamic target ID if one is set
+    if (app.settings.target_device_id) {
+        app.mqttClient.subscribe(`${app.settings.target_device_id}/data`);
+    }
 }
 
 main();
