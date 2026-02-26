@@ -31,6 +31,7 @@ let ctDataMap = Array(28).fill(null).map((_, i) => ({
     meanI: 0,
     activePower15s: 0,
     apparentPower15s: 0,
+    reactivePower15s: 0,
     maxActivePower: 0,
     pf15s: 0,
     maxPF: 0,
@@ -144,12 +145,14 @@ function processIncomingData(payload) {
         let currentVal = 0;
         let activeVal = 0;
         let apparentVal = 0;
+        let reactiveVal = 0;
 
         // Check for new flat array format
         if (payload.currents && Array.isArray(payload.currents)) {
             currentVal = payload.currents[i] || 0;
             activeVal = payload.active_powers ? (payload.active_powers[i] || 0) : 0;
             apparentVal = payload.apparent_powers ? (payload.apparent_powers[i] || 0) : 0;
+            reactiveVal = payload.reactive_powers ? (payload.reactive_powers[i] || 0) : 0;
         }
         // Fallback to old channels object array format
         else if (payload.channels && Array.isArray(payload.channels)) {
@@ -158,6 +161,7 @@ function processIncomingData(payload) {
                 currentVal = ct.current || 0;
                 activeVal = ct.active_power || 0;
                 apparentVal = ct.apparent_power || 0;
+                reactiveVal = ct.reactive_power || 0;
             }
         }
 
@@ -166,6 +170,7 @@ function processIncomingData(payload) {
         // Instantaneous power capture (don't accumulate power, just store latest for 15s window analysis)
         ctDataMap[i].activePower15s = activeVal;
         ctDataMap[i].apparentPower15s = apparentVal;
+        ctDataMap[i].reactivePower15s = reactiveVal;
     }
 
     accCount++;
@@ -377,6 +382,7 @@ function publishUiData(meanV) {
             current: c.meanI.toFixed(2),
             activeP: c.activePower15s.toFixed(1),
             apparentP: c.apparentPower15s.toFixed(1),
+            reactiveP: c.reactivePower15s.toFixed(1),
             pf: c.pf15s.toFixed(2),
             avgPf: isNaN(c.avgPF) ? 'N/A' : c.avgPF.toFixed(2),
             assoc: c.currentAssoc
