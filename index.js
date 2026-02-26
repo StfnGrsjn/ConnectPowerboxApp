@@ -46,7 +46,12 @@ let systemTopology = "Unknown / Fluctuating";
 
 // 3. Connect to App Events
 app.onSettingsUpdated = (newSettings) => {
-    app.logger.info(`Settings updated! Target Device ID: ${newSettings.target_device_id}`);
+    // Gracefully handle if user adds trailing /data to the ID
+    if (app.settings.target_device_id && app.settings.target_device_id.endsWith('/data')) {
+        app.settings.target_device_id = app.settings.target_device_id.replace(/\/data$/, '');
+    }
+
+    app.logger.info(`Settings updated! Target Device ID: ${app.settings.target_device_id}`);
     setupRemoteClient();
 };
 
