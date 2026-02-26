@@ -1,0 +1,8 @@
+{
+    "title": "Connect Powerbox App",
+    "developer": "StfnGrsjn",
+    "category": "Genius Apps",
+    "description": "Processes high-frequency data from a Smappee Connect Powerbox, computes phase systems, handles 15s aggregations, and orchestrates writeback configurations.",
+    "requiresHardware": true,
+    "language": "Node.js"
+}
